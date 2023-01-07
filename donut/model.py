@@ -8,8 +8,8 @@ import os
 import re
 from typing import Any, List, Optional, Union
 
-import numpy as np
 import PIL
+import numpy as np
 import timm
 import torch
 import torch.nn as nn
@@ -21,7 +21,7 @@ from torchvision import transforms
 from torchvision.transforms.functional import resize, rotate
 from transformers import MBartConfig, MBartForCausalLM, XLMRobertaTokenizer
 from transformers.file_utils import ModelOutput
-from transformers.modeling_utils import PretrainedConfig, PreTrainedModel
+from transformers.modeling_utils import PreTrainedModel, PretrainedConfig
 
 
 class SwinEncoder(nn.Module):
@@ -40,12 +40,12 @@ class SwinEncoder(nn.Module):
     """
 
     def __init__(
-        self,
-        input_size: List[int],
-        align_long_axis: bool,
-        window_size: int,
-        encoder_layer: List[int],
-        name_or_path: Union[str, bytes, os.PathLike] = None,
+            self,
+            input_size: List[int],
+            align_long_axis: bool,
+            window_size: int,
+            encoder_layer: List[int],
+            name_or_path: Union[str, bytes, os.PathLike] = None,
     ):
         super().__init__()
         self.input_size = input_size
@@ -54,20 +54,20 @@ class SwinEncoder(nn.Module):
         self.encoder_layer = encoder_layer
 
         self.to_tensor = transforms.Compose(
-            [
-                transforms.ToTensor(),
-                transforms.Normalize(IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD),
-            ]
+                [
+                        transforms.ToTensor(),
+                        transforms.Normalize(IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD),
+                ]
         )
 
         self.model = SwinTransformer(
-            img_size=self.input_size,
-            depths=self.encoder_layer,
-            window_size=self.window_size,
-            patch_size=4,
-            embed_dim=128,
-            num_heads=[4, 8, 16, 32],
-            num_classes=0,
+                img_size=self.input_size,
+                depths=self.encoder_layer,
+                window_size=self.window_size,
+                patch_size=4,
+                embed_dim=128,
+                num_heads=[4, 8, 16, 32],
+                num_classes=0,
         )
 
         # weight init with swin
@@ -78,8 +78,8 @@ class SwinEncoder(nn.Module):
                 if x.endswith("relative_position_index") or x.endswith("attn_mask"):
                     pass
                 elif (
-                    x.endswith("relative_position_bias_table")
-                    and self.model.layers[0].blocks[0].attn.window_size[0] != 12
+                        x.endswith("relative_position_bias_table")
+                        and self.model.layers[0].blocks[0].attn.window_size[0] != 12
                 ):
                     pos_bias = swin_state_dict[x].unsqueeze(0)[0]
                     old_len = int(math.sqrt(len(pos_bias)))
@@ -110,8 +110,8 @@ class SwinEncoder(nn.Module):
         """
         img = img.convert("RGB")
         if self.align_long_axis and (
-            (self.input_size[0] > self.input_size[1] and img.width > img.height)
-            or (self.input_size[0] < self.input_size[1] and img.width < img.height)
+                (self.input_size[0] > self.input_size[1] and img.width > img.height)
+                or (self.input_size[0] < self.input_size[1] and img.width < img.height)
         ):
             img = rotate(img, angle=-90, expand=True)
         img = resize(img, min(self.input_size))
@@ -125,10 +125,10 @@ class SwinEncoder(nn.Module):
             pad_width = delta_width // 2
             pad_height = delta_height // 2
         padding = (
-            pad_width,
-            pad_height,
-            delta_width - pad_width,
-            delta_height - pad_height,
+                pad_width,
+                pad_height,
+                delta_width - pad_width,
+                delta_height - pad_height,
         )
         return self.to_tensor(ImageOps.expand(img, padding))
 
@@ -150,29 +150,29 @@ class BARTDecoder(nn.Module):
     """
 
     def __init__(
-        self, decoder_layer: int, max_position_embeddings: int, name_or_path: Union[str, bytes, os.PathLike] = None
+            self, decoder_layer: int, max_position_embeddings: int, name_or_path: Union[str, bytes, os.PathLike] = None
     ):
         super().__init__()
         self.decoder_layer = decoder_layer
         self.max_position_embeddings = max_position_embeddings
 
         self.tokenizer = XLMRobertaTokenizer.from_pretrained(
-            "hyunwoongko/asian-bart-ecjk" if not name_or_path else name_or_path
+                "hyunwoongko/asian-bart-ecjk" if not name_or_path else name_or_path
         )
 
         self.model = MBartForCausalLM(
-            config=MBartConfig(
-                is_decoder=True,
-                is_encoder_decoder=False,
-                add_cross_attention=True,
-                decoder_layers=self.decoder_layer,
-                max_position_embeddings=self.max_position_embeddings,
-                vocab_size=len(self.tokenizer),
-                scale_embedding=True,
-                add_final_layer_norm=True,
-            )
+                config=MBartConfig(
+                        is_decoder=True,
+                        is_encoder_decoder=False,
+                        add_cross_attention=True,
+                        decoder_layers=self.decoder_layer,
+                        max_position_embeddings=self.max_position_embeddings,
+                        vocab_size=len(self.tokenizer),
+                        scale_embedding=True,
+                        add_final_layer_norm=True,
+                )
         )
-        self.model.forward = self.forward  #  to get cross attentions and utilize `generate` function
+        self.model.forward = self.forward  # to get cross attentions and utilize `generate` function
 
         self.model.config.is_encoder_decoder = True  # to get cross-attention
         self.add_special_tokens(["<sep/>"])  # <sep/> is used for representing a list in a JSON
@@ -186,11 +186,12 @@ class BARTDecoder(nn.Module):
             for x in new_bart_state_dict:
                 if x.endswith("embed_positions.weight") and self.max_position_embeddings != 1024:
                     new_bart_state_dict[x] = torch.nn.Parameter(
-                        self.resize_bart_abs_pos_emb(
-                            bart_state_dict[x],
-                            self.max_position_embeddings
-                            + 2,  # https://github.com/huggingface/transformers/blob/v4.11.3/src/transformers/models/mbart/modeling_mbart.py#L118-L119
-                        )
+                            self.resize_bart_abs_pos_emb(
+                                    bart_state_dict[x],
+                                    self.max_position_embeddings
+                                    + 2,
+                                    # https://github.com/huggingface/transformers/blob/v4.11.3/src/transformers/models/mbart/modeling_mbart.py#L118-L119
+                            )
                     )
                 elif x.endswith("embed_tokens.weight") or x.endswith("lm_head.weight"):
                     new_bart_state_dict[x] = bart_state_dict[x][: len(self.tokenizer), :]
@@ -206,7 +207,8 @@ class BARTDecoder(nn.Module):
         if newly_added_num > 0:
             self.model.resize_token_embeddings(len(self.tokenizer))
 
-    def prepare_inputs_for_inference(self, input_ids: torch.Tensor, encoder_outputs: torch.Tensor, past=None, use_cache: bool = None, attention_mask: torch.Tensor = None):
+    def prepare_inputs_for_inference(self, input_ids: torch.Tensor, encoder_outputs: torch.Tensor, past=None,
+                                     use_cache: bool = None, attention_mask: torch.Tensor = None):
         """
         Args:
             input_ids: (batch_size, sequence_lenth)
@@ -219,25 +221,25 @@ class BARTDecoder(nn.Module):
         if past is not None:
             input_ids = input_ids[:, -1:]
         output = {
-            "input_ids": input_ids,
-            "attention_mask": attention_mask,
-            "past_key_values": past,
-            "use_cache": use_cache,
-            "encoder_hidden_states": encoder_outputs.last_hidden_state,
+                "input_ids": input_ids,
+                "attention_mask": attention_mask,
+                "past_key_values": past,
+                "use_cache": use_cache,
+                "encoder_hidden_states": encoder_outputs.last_hidden_state,
         }
         return output
 
     def forward(
-        self,
-        input_ids,
-        attention_mask: Optional[torch.Tensor] = None,
-        encoder_hidden_states: Optional[torch.Tensor] = None,
-        past_key_values: Optional[torch.Tensor] = None,
-        labels: Optional[torch.Tensor] = None,
-        use_cache: bool = None,
-        output_attentions: Optional[torch.Tensor] = None,
-        output_hidden_states: Optional[torch.Tensor] = None,
-        return_dict: bool = None,
+            self,
+            input_ids,
+            attention_mask: Optional[torch.Tensor] = None,
+            encoder_hidden_states: Optional[torch.Tensor] = None,
+            past_key_values: Optional[torch.Tensor] = None,
+            labels: Optional[torch.Tensor] = None,
+            use_cache: bool = None,
+            output_attentions: Optional[torch.Tensor] = None,
+            output_hidden_states: Optional[torch.Tensor] = None,
+            return_dict: bool = None,
     ):
         """
         A forward fucntion to get cross attentions and utilize `generate` function
@@ -259,18 +261,18 @@ class BARTDecoder(nn.Module):
         """
         output_attentions = output_attentions if output_attentions is not None else self.model.config.output_attentions
         output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.model.config.output_hidden_states
+                output_hidden_states if output_hidden_states is not None else self.model.config.output_hidden_states
         )
         return_dict = return_dict if return_dict is not None else self.model.config.use_return_dict
         outputs = self.model.model.decoder(
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            encoder_hidden_states=encoder_hidden_states,
-            past_key_values=past_key_values,
-            use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+                input_ids=input_ids,
+                attention_mask=attention_mask,
+                encoder_hidden_states=encoder_hidden_states,
+                past_key_values=past_key_values,
+                use_cache=use_cache,
+                output_attentions=output_attentions,
+                output_hidden_states=output_hidden_states,
+                return_dict=return_dict,
         )
 
         logits = self.model.lm_head(outputs[0])
@@ -285,12 +287,12 @@ class BARTDecoder(nn.Module):
             return (loss,) + output if loss is not None else output
 
         return ModelOutput(
-            loss=loss,
-            logits=logits,
-            past_key_values=outputs.past_key_values,
-            hidden_states=outputs.hidden_states,
-            decoder_attentions=outputs.attentions,
-            cross_attentions=outputs.cross_attentions,
+                loss=loss,
+                logits=logits,
+                past_key_values=outputs.past_key_values,
+                hidden_states=outputs.hidden_states,
+                decoder_attentions=outputs.attentions,
+                cross_attentions=outputs.cross_attentions,
         )
 
     @staticmethod
@@ -304,14 +306,14 @@ class BARTDecoder(nn.Module):
             weight = weight[:max_length, ...]
         else:
             weight = (
-                F.interpolate(
-                    weight.permute(1, 0).unsqueeze(0),
-                    size=max_length,
-                    mode="linear",
-                    align_corners=False,
-                )
-                .squeeze(0)
-                .permute(1, 0)
+                    F.interpolate(
+                            weight.permute(1, 0).unsqueeze(0),
+                            size=max_length,
+                            mode="linear",
+                            align_corners=False,
+                    )
+                    .squeeze(0)
+                    .permute(1, 0)
             )
         return weight
 
@@ -344,16 +346,16 @@ class DonutConfig(PretrainedConfig):
     model_type = "donut"
 
     def __init__(
-        self,
-        input_size: List[int] = [2560, 1920],
-        align_long_axis: bool = False,
-        window_size: int = 10,
-        encoder_layer: List[int] = [2, 2, 14, 2],
-        decoder_layer: int = 4,
-        max_position_embeddings: int = None,
-        max_length: int = 1536,
-        name_or_path: Union[str, bytes, os.PathLike] = "",
-        **kwargs,
+            self,
+            input_size: List[int] = [2560, 1920],
+            align_long_axis: bool = False,
+            window_size: int = 10,
+            encoder_layer: List[int] = [2, 2, 14, 2],
+            decoder_layer: int = 4,
+            max_position_embeddings: int = None,
+            max_length: int = 1536,
+            name_or_path: Union[str, bytes, os.PathLike] = "",
+            **kwargs,
     ):
         super().__init__()
         self.input_size = input_size
@@ -380,16 +382,16 @@ class DonutModel(PreTrainedModel):
         super().__init__(config)
         self.config = config
         self.encoder = SwinEncoder(
-            input_size=self.config.input_size,
-            align_long_axis=self.config.align_long_axis,
-            window_size=self.config.window_size,
-            encoder_layer=self.config.encoder_layer,
-            name_or_path=self.config.name_or_path,
+                input_size=self.config.input_size,
+                align_long_axis=self.config.align_long_axis,
+                window_size=self.config.window_size,
+                encoder_layer=self.config.encoder_layer,
+                name_or_path=self.config.name_or_path,
         )
         self.decoder = BARTDecoder(
-            max_position_embeddings=self.config.max_position_embeddings,
-            decoder_layer=self.config.decoder_layer,
-            name_or_path=self.config.name_or_path,
+                max_position_embeddings=self.config.max_position_embeddings,
+                decoder_layer=self.config.decoder_layer,
+                name_or_path=self.config.name_or_path,
         )
 
     def forward(self, image_tensors: torch.Tensor, decoder_input_ids: torch.Tensor, decoder_labels: torch.Tensor):
@@ -404,20 +406,20 @@ class DonutModel(PreTrainedModel):
         """
         encoder_outputs = self.encoder(image_tensors)
         decoder_outputs = self.decoder(
-            input_ids=decoder_input_ids,
-            encoder_hidden_states=encoder_outputs,
-            labels=decoder_labels,
+                input_ids=decoder_input_ids,
+                encoder_hidden_states=encoder_outputs,
+                labels=decoder_labels,
         )
         return decoder_outputs
 
     def inference(
-        self,
-        image: PIL.Image = None,
-        prompt: str = None,
-        image_tensors: Optional[torch.Tensor] = None,
-        prompt_tensors: Optional[torch.Tensor] = None,
-        return_json: bool = True,
-        return_attentions: bool = False,
+            self,
+            image: PIL.Image = None,
+            prompt_list: List[str] = None,
+            image_tensors: Optional[torch.Tensor] = None,
+            prompt_tensors_list: List[torch.Tensor] = None,
+            return_json: bool = True,
+            return_attentions: bool = False,
     ):
         """
         Generate a token sequence in an auto-regressive manner,
@@ -434,7 +436,7 @@ class DonutModel(PreTrainedModel):
         # prepare backbone inputs (image and prompt)
         if image is None and image_tensors is None:
             raise ValueError("Expected either image or image_tensors")
-        if all(v is None for v in {prompt, prompt_tensors}):
+        if all(v is None for v in {prompt_list, prompt_tensors_list}):
             raise ValueError("Expected either prompt or prompt_tensors")
 
         if image_tensors is None:
@@ -444,10 +446,12 @@ class DonutModel(PreTrainedModel):
             image_tensors = image_tensors.half()
             image_tensors = image_tensors.to(self.device)
 
-        if prompt_tensors is None:
-            prompt_tensors = self.decoder.tokenizer(prompt, add_special_tokens=False, return_tensors="pt")["input_ids"]
+        if prompt_tensors_list is None:
+            prompt_tensors_list = [
+                    self.decoder.tokenizer(prompt, add_special_tokens=False, return_tensors="pt")["input_ids"]
+                    for prompt in prompt_list]
 
-        prompt_tensors = prompt_tensors.to(self.device)
+        prompt_tensors_list = [prompt_tensors.to(self.device) for prompt_tensors in prompt_tensors_list]
 
         last_hidden_state = self.encoder(image_tensors)
         if self.device.type != "cuda":
@@ -457,40 +461,46 @@ class DonutModel(PreTrainedModel):
 
         if len(encoder_outputs.last_hidden_state.size()) == 1:
             encoder_outputs.last_hidden_state = encoder_outputs.last_hidden_state.unsqueeze(0)
-        if len(prompt_tensors.size()) == 1:
-            prompt_tensors = prompt_tensors.unsqueeze(0)
 
-        # get decoder output
-        decoder_output = self.decoder.model.generate(
-            decoder_input_ids=prompt_tensors,
-            encoder_outputs=encoder_outputs,
-            max_length=self.config.max_length,
-            early_stopping=True,
-            pad_token_id=self.decoder.tokenizer.pad_token_id,
-            eos_token_id=self.decoder.tokenizer.eos_token_id,
-            use_cache=True,
-            num_beams=1,
-            bad_words_ids=[[self.decoder.tokenizer.unk_token_id]],
-            return_dict_in_generate=True,
-            output_attentions=return_attentions,
-        )
+        output_list = []
+        for prompt_tensors in prompt_tensors_list:
 
-        output = {"predictions": list()}
-        for seq in self.decoder.tokenizer.batch_decode(decoder_output.sequences):
-            seq = seq.replace(self.decoder.tokenizer.eos_token, "").replace(self.decoder.tokenizer.pad_token, "")
-            seq = re.sub(r"<.*?>", "", seq, count=1).strip()  # remove first task start token
-            if return_json:
-                output["predictions"].append(self.token2json(seq))
-            else:
-                output["predictions"].append(seq)
+            if len(prompt_tensors.size()) == 1:
+                prompt_tensors = prompt_tensors.unsqueeze(0)
 
-        if return_attentions:
-            output["attentions"] = {
-                "self_attentions": decoder_output.decoder_attentions,
-                "cross_attentions": decoder_output.cross_attentions,
-            }
+            # get decoder output
+            decoder_output = self.decoder.model.generate(
+                    decoder_input_ids=prompt_tensors,
+                    encoder_outputs=encoder_outputs,
+                    max_length=self.config.max_length,
+                    early_stopping=True,
+                    pad_token_id=self.decoder.tokenizer.pad_token_id,
+                    eos_token_id=self.decoder.tokenizer.eos_token_id,
+                    use_cache=True,
+                    num_beams=1,
+                    bad_words_ids=[[self.decoder.tokenizer.unk_token_id]],
+                    return_dict_in_generate=True,
+                    output_attentions=return_attentions,
+            )
 
-        return output
+            output = {"predictions": list()}
+            for seq in self.decoder.tokenizer.batch_decode(decoder_output.sequences):
+                seq = seq.replace(self.decoder.tokenizer.eos_token, "").replace(self.decoder.tokenizer.pad_token, "")
+                seq = re.sub(r"<.*?>", "", seq, count=1).strip()  # remove first task start token
+                if return_json:
+                    output["predictions"].append(self.token2json(seq))
+                else:
+                    output["predictions"].append(seq)
+
+            if return_attentions:
+                output["attentions"] = {
+                        "self_attentions": decoder_output.decoder_attentions,
+                        "cross_attentions": decoder_output.cross_attentions,
+                }
+
+            output_list.append(output)
+
+        return output_list
 
     def json2token(self, obj: Any, update_special_tokens_for_json_key: bool = True, sort_json_key: bool = True):
         """
@@ -509,14 +519,14 @@ class DonutModel(PreTrainedModel):
                     if update_special_tokens_for_json_key:
                         self.decoder.add_special_tokens([fr"<s_{k}>", fr"</s_{k}>"])
                     output += (
-                        fr"<s_{k}>"
-                        + self.json2token(obj[k], update_special_tokens_for_json_key, sort_json_key)
-                        + fr"</s_{k}>"
+                            fr"<s_{k}>"
+                            + self.json2token(obj[k], update_special_tokens_for_json_key, sort_json_key)
+                            + fr"</s_{k}>"
                     )
                 return output
         elif type(obj) == list:
             return r"<sep/>".join(
-                [self.json2token(item, update_special_tokens_for_json_key, sort_json_key) for item in obj]
+                    [self.json2token(item, update_special_tokens_for_json_key, sort_json_key) for item in obj]
             )
         else:
             obj = str(obj)
@@ -557,16 +567,16 @@ class DonutModel(PreTrainedModel):
                         for leaf in content.split(r"<sep/>"):
                             leaf = leaf.strip()
                             if (
-                                leaf in self.decoder.tokenizer.get_added_vocab()
-                                and leaf[0] == "<"
-                                and leaf[-2:] == "/>"
+                                    leaf in self.decoder.tokenizer.get_added_vocab()
+                                    and leaf[0] == "<"
+                                    and leaf[-2:] == "/>"
                             ):
                                 leaf = leaf[1:-2]  # for categorical special tokens
                             output[key].append(leaf)
                         if len(output[key]) == 1:
                             output[key] = output[key][0]
 
-                tokens = tokens[tokens.find(end_token) + len(end_token) :].strip()
+                tokens = tokens[tokens.find(end_token) + len(end_token):].strip()
                 if tokens[:6] == r"<sep/>":  # non-leaf nodes
                     return [output] + self.token2json(tokens[6:], is_inner_value=True)
 
@@ -577,10 +587,10 @@ class DonutModel(PreTrainedModel):
 
     @classmethod
     def from_pretrained(
-        cls,
-        pretrained_model_name_or_path: Union[str, bytes, os.PathLike],
-        *model_args,
-        **kwargs,
+            cls,
+            pretrained_model_name_or_path: Union[str, bytes, os.PathLike],
+            *model_args,
+            **kwargs,
     ):
         r"""
         Instantiate a pretrained donut model from a pre-trained model configuration
@@ -590,19 +600,21 @@ class DonutModel(PreTrainedModel):
                 Name of a pretrained model name either registered in huggingface.co. or saved in local,
                 e.g., `naver-clova-ix/donut-base`, or `naver-clova-ix/donut-base-finetuned-rvlcdip`
         """
-        model = super(DonutModel, cls).from_pretrained(pretrained_model_name_or_path, revision="official", *model_args, **kwargs)
+        model = super(DonutModel, cls).from_pretrained(pretrained_model_name_or_path, revision="official", *model_args,
+                                                       **kwargs)
 
         # truncate or interplolate position embeddings of donut decoder
         max_length = kwargs.get("max_length", model.config.max_position_embeddings)
         if (
-            max_length != model.config.max_position_embeddings
+                max_length != model.config.max_position_embeddings
         ):  # if max_length of trained model differs max_length you want to train
             model.decoder.model.model.decoder.embed_positions.weight = torch.nn.Parameter(
-                model.decoder.resize_bart_abs_pos_emb(
-                    model.decoder.model.model.decoder.embed_positions.weight,
-                    max_length
-                    + 2,  # https://github.com/huggingface/transformers/blob/v4.11.3/src/transformers/models/mbart/modeling_mbart.py#L118-L119
-                )
+                    model.decoder.resize_bart_abs_pos_emb(
+                            model.decoder.model.model.decoder.embed_positions.weight,
+                            max_length
+                            + 2,
+                            # https://github.com/huggingface/transformers/blob/v4.11.3/src/transformers/models/mbart/modeling_mbart.py#L118-L119
+                    )
             )
             model.config.max_position_embeddings = max_length
 
