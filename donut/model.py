@@ -436,8 +436,9 @@ class DonutModel(PreTrainedModel):
         # prepare backbone inputs (image and prompt)
         if image is None and image_tensors is None:
             raise ValueError("Expected either image or image_tensors")
-        if all(v is None for v in {prompt_list, prompt_tensors_list}):
-            raise ValueError("Expected either prompt or prompt_tensors")
+        if prompt_list is None or len(prompt_list) == 0:
+            if prompt_tensors_list is None:
+                raise ValueError("Expected either prompt_list or prompt_tensors_list")
 
         if image_tensors is None:
             image_tensors = self.encoder.prepare_input(image).unsqueeze(0)
