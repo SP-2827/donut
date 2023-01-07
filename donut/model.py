@@ -448,6 +448,8 @@ class DonutModel(PreTrainedModel):
             image_tensors = image_tensors.to(self.device)
 
         if prompt_tensors_list is None:
+            if prompt_list is None or len(prompt_list) == 0:
+                raise ValueError("Expected prompt_list")
             prompt_tensors_list = [
                     self.decoder.tokenizer(prompt, add_special_tokens=False, return_tensors="pt")["input_ids"]
                     for prompt in prompt_list]
